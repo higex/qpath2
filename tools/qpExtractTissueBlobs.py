@@ -54,6 +54,7 @@ def main():
                    choices=['ppm', 'tiff', 'jpeg'], default='ppm')
     p.add_argument('-v', '--verbose', action='store_true', help='verbose')
     p.add_argument('-m', '--mask', action='store_true', help='save mask at image resolution?')
+    p.add_argument('-n', '--names', action='store', help='a list of tissue blob names (e.g. stains)', nargs='+')
 
     args = p.parse_args()
     rx = re.compile(r'(\d+,\d+)')
@@ -71,7 +72,7 @@ def main():
     # read the lowest resolution and try to detect the tissue pieces
     lowest_res_level = img.level_count - 1
     img_full = img.read_region((0, 0), lowest_res_level,
-                               img.level_dimensions[lowest_res_level])  # mask autoamically applied, background is 0
+                               img.level_dimensions[lowest_res_level])  # mask automatically applied, background is 0
     img_data = np.asarray(img_full)[:, :,
                :3 if len(img_full.getbands()) >= 3 else 1]  # get image data into numpy array object
 
@@ -97,6 +98,10 @@ def main():
 
     img.close()
 
+    # order the regions, from the top-most (smaller y coordinate of the bounding box) to the
+    # bottom-most:
+    props = sorted(props, key=lambda _pr: _pr.bbox[0])
+
     k = 0
     for pr in props:
         # get mask:
@@ -108,9 +113,13 @@ def main():
         height = np.int64(s * (pr.bbox[2] - pr.bbox[0]))
 
         # store meta:
-        tname = "tissue_{:d}".format(k)
+        if args.names is not None and k < len(args.names):
+            tname = args.names[k]
+        else:
+            tname = "tissue_{:d}".format(k)
 
         dst_path = args.prefix + os.path.sep + tname
+
         if not os.path.exists(dst_path):
             os.mkdir(dst_path)
 
