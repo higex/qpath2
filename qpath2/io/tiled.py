@@ -24,7 +24,7 @@
 
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 
-__all__ = ['save_tiled_image']
+__all__ = ['save_tiled_image', 'load_tiled_image']
 
 from math import floor
 import os
@@ -87,3 +87,33 @@ def save_tiled_image(img, root, level, tile_geom, img_type="jpeg"):
 
     return tile_meta
 ##-end
+
+
+##-
+def load_tiled_image(img_meta):
+    """Load a tiled image. All the information about the tile geometry and tile paths is
+     taken from img_meta.
+
+    Args:
+        img_meta (dict): a descriptor for the tiled image with at least the following
+            keys (see save_tiled_image)
+                level_image_width
+                level_image_height
+                level_image_nchannels
+                n_tiles_horiz
+                n_tiles_vert
+                tile_width
+                tile_height
+            and for each tile, an entry as
+                'tile_i_j' which is a dict with keys:
+                i
+                j
+                name
+                x
+                y
+
+    Returns:
+        a vigra.VigraArray
+    """
+
+##-

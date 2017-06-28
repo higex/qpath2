@@ -61,10 +61,16 @@ def main():
     h, v = rx.findall(args.tile)[0].split(',')
     tile_geom = (int(abs(float(h))), int(abs(float(v))))
 
+
+    print('Working on ' + args.img_file)
     img = osl.OpenSlide(args.img_file)
     meta = {'objective': img.properties[osl.PROPERTY_NAME_OBJECTIVE_POWER],
             'mpp_x': float(img.properties[osl.PROPERTY_NAME_MPP_X]),
             'mpp_y': float(img.properties[osl.PROPERTY_NAME_MPP_Y])}
+
+    if os.path.exists(args.prefix + '/meta.json'):
+        with open(args.prefix + '/meta.json', 'r') as fd:
+            meta = json.load(fd)
 
     if args.level == -1 or args.level >= img.level_count:
         args.level = img.level_count - 1
@@ -136,6 +142,7 @@ def main():
         # file. Then re-read it and continue with processing.
 
         print("Extract tissue blob {:d}".format(k+1))
+
         sp.check_call(["openslide-write-png", args.img_file,
                        '{:d}'.format(start_x),
                        '{:d}'.format(start_y),

@@ -1,6 +1,6 @@
 all:compgeom_.so
 
-compgeom_.so:
+compgeom_.so: compgeom.cxx
 	g++ -shared -fPIC -o compgeom_.so \
 		-I /home/vlad/PyEnvs/py2dp/include/python2.7 \
 		-std=c++0x compgeom.cxx -lboost_python -lCGAL \

@@ -16,6 +16,8 @@ __all__ = ['Error', 'WSIInfo', 'MRIBase', 'MRI',
 import openslide as osl
 import abc
 import numpy as np
+import vigra
+
 
 
 class Error(Exception):
@@ -130,7 +132,7 @@ class MRIBase(object):
             as_type: type of the pixels (default numpy.uint8)
 
         Returns:
-            a numpy.ndarray
+            a vigra.VigraArray
         """
         pass
 
@@ -146,7 +148,7 @@ class MRIBase(object):
             as_type: type of the pixels (default numpy.uint8)
 
         Returns:
-            a numpy.ndarray
+            a vigra.VigraArray
         """
         pass
 
@@ -184,7 +186,7 @@ class MRI(MRIBase):
                 as_type: type of the pixels (default numpy.uint8)
 
             Returns:
-                a numpy.ndarray
+                a vigra.VigraArray object, with image pixels addressable as [x, y, channel]
         """
 
         # OpenSlide requires specification of (x0,y0) in level-0 coordinates, so
@@ -197,19 +199,14 @@ class MRI(MRIBase):
             y0 *= sy
 
         pil_obj = self._reader.read_region((x0, y0), level, (width, height))
-        channels = pil_obj.getbands()
-        img_data = np.asarray(pil_obj)
+        np_array = np.asarray(pil_obj, dtype=as_type, order='F')
+        img_data = np_array.view(vigra.VigraArray)
+        img_data.axistags = vigra.AxisTags('yxc')
 
-        if img_data.dtype != as_type:
-            img_data = img_data.astype(as_type)
+        img_data.axistags.setResolution('x', self.info['levels'][level]['downsample_factor'] * self.info['x_mpp'])
+        img_data.axistags.setResolution('y', self.info['levels'][level]['downsample_factor'] * self.info['y_mpp'])
 
-        if len(channels) == 1:
-            return img_data[:,:,0].squeeze()
-
-        # make sure to return R, G, B
-        c = dict(zip(channels, range(len(channels))))  # maps 'R',... to indexes
-
-        return img_data[:,:,[c['R'],c['G'],c['B']]]
+        return img_data.transposeToVigraOrder()
 
 
     def get_region(self, x0, y0, width, height, level, as_type=np.uint8):
@@ -220,8 +217,8 @@ class MRI(MRIBase):
 ##-
 class MRIExplorer(object):
     """Defines an interface for multi-resolution image explorers. An image
-    explorer simply returns positions in an image rather then parts of the
-    image. Hence, it only needs to know about the extent of the image.
+    explorer simply returns positions in an image rather than parts of the
+    image itself. Hence, it only needs to know about the extent of the image.
     """
     __metaclass__ = abc.ABCMeta
 
@@ -316,7 +313,8 @@ class MRISlidingWindow(MRIExplorer):
     def here(self):
         if 0 <= self._k < self.total_steps():
             x0, y0 = self._top_left_corners[self._k]
-            x1, y1 = x0 + self._w_size[0], y0 + self._w_size[1]
+            x1 = min(x0 + self._w_size[0], self._image_shape[1])
+            y1 = min(y0 + self._w_size[1], self._image_shape[0])
 
             return x0, y0, x1, y1
         raise Error("Position outside bounds")
@@ -345,3 +343,4 @@ class MRISlidingWindow(MRIExplorer):
         else:
             raise StopIteration()
 ##-
+
