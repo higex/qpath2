@@ -26,13 +26,18 @@ from __future__ import (absolute_import, division, print_function, unicode_liter
 
 __all__ = ['save_tiled_image', 'load_tiled_image']
 
+import gi
+gi.require_version('Vips', '8.0')
+from gi.repository import Vips
+from gi.repository.Vips import Image as vi
+
 from math import floor
 import os
 import os.path
 import shutil
 import simplejson as json
-from skimage.io import imsave
-
+import numpy as np
+from skimage.io import imread, imsave
 
 ##-
 def save_tiled_image(img, root, level, tile_geom, img_type="jpeg"):
@@ -44,7 +49,8 @@ def save_tiled_image(img, root, level, tile_geom, img_type="jpeg"):
     *WARNING*: any existing tiles in the path root/level will be deleted!
 
     Args:
-        img (numpy array): an image
+        img (numpy array): an image in OpenCV ordering (BGR). Alpha channel is not
+            supported
         root (string): root folder of the image storing hierarchy. The tiles will be
             stored into root/level folder
         level (int): the magnification level
@@ -54,6 +60,9 @@ def save_tiled_image(img, root, level, tile_geom, img_type="jpeg"):
     Returns:
         dict: a dictionary with meta-data about the tiles and original image
     """
+    assert(img.ndim == 2 or (img.ndim == 3 and img.shape[2] <= 3))
+
+    n_channels = 1 if img.ndim == 2 else img.shape[2]
     dst_path = root + os.path.sep + 'level_{:d}'.format(level)
 
     tg = (min(tile_geom[0], img.shape[1]), min(tile_geom[1], img.shape[0]))
@@ -75,11 +84,16 @@ def save_tiled_image(img, root, level, tile_geom, img_type="jpeg"):
 
     for i in range(nv):
         for j in range(nh):
-            im_sub = img[i * tg[1]:(i + 1) * tg[1], j * tg[0]:(j + 1) * tg[0], :]
+            i0, j0 = i * tg[1], j * tg[0]
+            i1, j1 = min((i + 1) * tg[1], img.shape[0]), min((j + 1) * tg[0], img.shape[1])
+            if n_channels == 1:
+                im_sub = img[i0:i1, j0:j1]
+            else:
+                im_sub = img[i0:i1, j0:j1, :]
             tile_meta['tile_' + str(i) + '_' + str(j)] = dict(
                 {'name': dst_path + '/tile_' + str(i) + '_' + str(j) + '.' + img_type,
                  'i': i, 'j': j,
-                 'x': j * tg[0], 'y': i * tg[1]})
+                 'x': j0, 'y': i0})
             imsave(dst_path + os.path.sep + 'tile_' + str(i) + '_' + str(j) + '.' + img_type, im_sub)
 
     with open(dst_path + os.path.sep + 'meta.json', 'w') as fp:
@@ -102,8 +116,6 @@ def load_tiled_image(img_meta):
                 level_image_nchannels
                 n_tiles_horiz
                 n_tiles_vert
-                tile_width
-                tile_height
             and for each tile, an entry as
                 'tile_i_j' which is a dict with keys:
                 i
@@ -115,5 +127,19 @@ def load_tiled_image(img_meta):
     Returns:
         a vigra.VigraArray
     """
+    img_w, img_h = long(img_meta['level_image_width']), long(img_meta['level_image_height'])
+    nh, nv = long(img_meta['n_tiles_horiz']), long(img_meta['n_tiles_vert'])
 
+    img = np.zeros((img_h, img_w, 3), dtype=np.uint8)
+
+    for i in range(nv):
+        for j in range(nh):
+            tile_id = 'tile_'+str(i)+'_'+str(j)
+            tile = imread(img_meta[tile_id]['name']).astype(np.uint8)
+            # the tile might not have the regular default shape, so it's better to use the
+            # tile's shape than 'tile_width' and 'tile_height'
+            x, y = long(img_meta[tile_id]['x']), long(img_meta[tile_id]['y'])
+            img[x:x+tile.width, y:y+tile.height, :] = tile
+
+    return img
 ##-

@@ -21,14 +21,15 @@ import subprocess as sp
 import re
 import os, os.path
 
-from skimage.io import imsave, imread
 from skimage.transform import resize
-from skimage.morphology import remove_small_objects, convex_hull_object, dilation, disk
+from skimage.morphology import remove_small_objects, convex_hull_object
 from skimage.filters import threshold_otsu
 from skimage.color import rgb2gray
 from skimage.measure import label, regionprops
 from skimage.external import tifffile
+from skimage.io import imsave, imread
 
+from qpath2.core import WSIInfo, MRI
 from qpath2.io.tiled import save_tiled_image
 
 import warnings
@@ -63,26 +64,41 @@ def main():
 
 
     print('Working on ' + args.img_file)
-    img = osl.OpenSlide(args.img_file)
-    meta = {'objective': img.properties[osl.PROPERTY_NAME_OBJECTIVE_POWER],
-            'mpp_x': float(img.properties[osl.PROPERTY_NAME_MPP_X]),
-            'mpp_y': float(img.properties[osl.PROPERTY_NAME_MPP_Y])}
+    img = WSIInfo(args.img_file)
+    mri = MRI(img)
+    #img = osl.OpenSlide(args.img_file)
+    #meta = {'objective': img.properties[osl.PROPERTY_NAME_OBJECTIVE_POWER],
+    #        'mpp_x': float(img.properties[osl.PROPERTY_NAME_MPP_X]),
+    #        'mpp_y': float(img.properties[osl.PROPERTY_NAME_MPP_Y])}
+    meta = {'objective': img.info['objective'],
+            'mpp_x': img.info['x_mpp'],
+            'mpp_y': img.info['y_mpp']}
 
     if os.path.exists(args.prefix + '/meta.json'):
         with open(args.prefix + '/meta.json', 'r') as fd:
             meta = json.load(fd)
 
-    if args.level == -1 or args.level >= img.level_count:
-        args.level = img.level_count - 1
+    if args.level == -1 or args.level >= img.info['level_count']:
+        args.level = img.info['level_count'] - 1
 
     # read the lowest resolution and try to detect the tissue pieces
-    lowest_res_level = img.level_count - 1
-    img_full = img.read_region((0, 0), lowest_res_level,
-                               img.level_dimensions[lowest_res_level])  # mask automatically applied, background is 0
-    img_data = np.asarray(img_full)[:, :,
-               :3 if len(img_full.getbands()) >= 3 else 1]  # get image data into numpy array object
+    lowest_res_level = img.info['level_count'] - 1
+    #img_full = img.read_region((0, 0), lowest_res_level,
+    #                           img.level_dimensions[lowest_res_level])  # mask automatically applied, background is 0
+    #img_data = np.asarray(img_full)
+    img_data = mri.get_region_px(0, 0,
+                                 img.info['levels'][lowest_res_level]['x_size'],
+                                 img.info['levels'][lowest_res_level]['y_size'],
+                                 lowest_res_level, as_type=np.uint8)
 
-    img_gray = rgb2gray(img_data)
+    if img_data.ndim == 3 and img_data.shape[2] > 3:
+        img_data = img_data[..., :3]  # drop alpha channel
+
+    if img_data.ndim ==3:
+        img_gray = rgb2gray(img_data)
+    else:
+        img_gray = img_data
+
     th = threshold_otsu(img_gray)
     img_bin = img_gray >= th  # black background
     # img_bin = dilation(img_bin, selem=disk(3))
@@ -95,14 +111,14 @@ def main():
     if args.verbose:
         print("Number of tissue blobs: {:d}".format(len(props)))
         imsave(args.prefix + os.path.sep + 'whole_slide.jpeg', img_data)
-        imsave(args.prefix + os.path.sep + 'whole_slide_blobs.jpeg', labels)
+        imsave(args.prefix + os.path.sep + 'whole_slide_blobs.jpeg', 255*labels)
 
     # extract tissue regions:
-    s = img.level_downsamples[lowest_res_level] / \
-        img.level_downsamples[args.level]  # downscale factor for the lowest resolution wrt. desired level
-    s0 = img.level_downsamples[lowest_res_level]  # downscale factor for the lowest resolution wrt. level 0
-
-    img.close()
+    s = img.info['levels'][lowest_res_level]['downsample_factor'] / \
+        img.info['levels'][args.level]['downsample_factor']  # downscale factor for the lowest resolution wrt. desired level
+    # s0 = img.level_downsamples[lowest_res_level]  # downscale factor for the lowest resolution wrt. level 0
+    #
+    # img.close()
 
     # order the regions, from the top-most (smaller y coordinate of the bounding box) to the
     # bottom-most:
@@ -113,8 +129,8 @@ def main():
         # get mask:
         msk = img_bin[pr.bbox[0]:pr.bbox[2], pr.bbox[1]:pr.bbox[3]].astype(np.uint8)
         # get image at highest resolution:
-        start_x = np.int64(max(s0 * pr.bbox[1], 0))
-        start_y = np.int64(max(s0 * pr.bbox[0], 0))
+        #start_x = np.int64(max(s0 * pr.bbox[1], 0))
+        #start_y = np.int64(max(s0 * pr.bbox[0], 0))
         width = np.int64(s * (pr.bbox[3] - pr.bbox[1]))
         height = np.int64(s * (pr.bbox[2] - pr.bbox[0]))
 
@@ -130,7 +146,7 @@ def main():
             os.mkdir(dst_path)
 
         meta[tname] = dict({"name": dst_path + os.path.sep + tname + '_level_{:d}.png'.format(args.level),
-                            "mask": dst_path + os.path.sep + tname + '_mask_level_{:d}.pbm'.format(args.level),
+                            "mask": dst_path + os.path.sep + tname + '_mask_level_{:d}.tiff'.format(args.level),
                             "from_original_level": args.level,
                             "from_original_x": s * pr.bbox[1],
                             "from_original_y": s * pr.bbox[0],
@@ -143,30 +159,41 @@ def main():
 
         print("Extract tissue blob {:d}".format(k+1))
 
-        sp.check_call(["openslide-write-png", args.img_file,
-                       '{:d}'.format(start_x),
-                       '{:d}'.format(start_y),
-                       '{:d}'.format(args.level),
-                       '{:d}'.format(width),
-                       '{:d}'.format(height),
-                       meta[tname]['name']])
+        # check whether the image already exists - hopefully the correct one, from a
+        # previous run
+        # if not os.path.exists(meta[tname]['name']):
+        #     sp.check_call(["openslide-write-png", args.img_file,
+        #                    '{:d}'.format(start_x),
+        #                    '{:d}'.format(start_y),
+        #                    '{:d}'.format(args.level),
+        #                    '{:d}'.format(width),
+        #                    '{:d}'.format(height),
+        #                    meta[tname]['name']])
+
+        # print('reading '+ meta[tname]['name'])
+        # img_data = imread(meta[tname]['name'])
 
         # img_tissue = img.read_region((start_x, start_y), args.level,
         #                              (width, height))
-        img_data = imread(meta[tname]['name'])
-        msk_from_scanner = img_data[:,:,3]  # alpha-channel: 255 for the tissue region, 0 elsewhere
-        msk_from_scanner[msk_from_scanner == 255] = 1
-        img_data = img_data[:,:,:3]
+        img_data = mri.get_region_px(s * pr.bbox[1], s * pr.bbox[0], width, height, args.level, as_type=np.uint8)
 
-        small_mask = resize(msk_from_scanner, msk.shape)
-        small_mask *= msk  # 'AND' the masks
+        msk_from_scanner = None
+        if img_data.ndim == 3 and img_data.shape[2] == 4:
+            # has alpha-channel
+            msk_from_scanner = img_data[:,:,3].astype(np.uint8)  # alpha-channel: 255 for the tissue region, 0 elsewhere
+            msk_from_scanner[msk_from_scanner == 255] = 1  # img 0/1
+            small_mask = resize(msk_from_scanner, msk.shape, order=0, mode='constant', cval=0, preserve_range=True)
+            small_mask[small_mask < 1] = 0
+            small_mask *= msk  # 'AND' the masks
+
+            img_data = img_data[:,:,:3]  # drop alpha-channel from image data
 
         # up-scale the mask and set "True" for foreground
-        # msk = resize(msk, img_data.shape[:-1], mode='constant', preserve_range=True).astype(np.uint8)
-        msk = resize(msk, (height, width), mode='constant', preserve_range=True).astype(np.uint8)
+        msk = resize(msk, img_data.shape[:2], mode='constant', order=0, cval=0, preserve_range=True)
         msk[msk < 1] = 0  # drop values due to aliasing
 
-        msk *= msk_from_scanner   # 'AND' the two masks
+        if msk_from_scanner is not None:
+            msk *= msk_from_scanner   # 'AND' the two masks
 
         if img_data.ndim == 2:
             img_data *= msk
@@ -178,16 +205,19 @@ def main():
         save_tiled_image(img_data, dst_path, args.level, tile_geom, img_type=args.format)
 
         # save, anyway, the small mask:
-        imsave(dst_path + os.path.sep + tname + '_level_{:d}.ppm'.format(lowest_res_level), small_mask)
+        imsave(dst_path + os.path.sep + tname + '_level_{:d}.ppm'.format(lowest_res_level), 255*small_mask)
 
         # the large mask is saved only if asked:
         if args.mask:
             with tifffile.TiffWriter(meta[tname]['mask'], bigtiff=True) as tif:
                 tif.save(255 * msk, compress=9, tile=(512, 512))
 
-        if not args.keep_whole_image:
-            os.remove(meta[tname]['name'])
-            meta[tname]['name'] = ''
+        #if not args.keep_whole_image:
+        #    os.remove(meta[tname]['name'])
+        #    meta[tname]['name'] = ''
+        if args.keep_whole_image:
+            with tifffile.TiffWriter(meta[tname]['name'], bigtiff=True) as tif:
+                tif.save(img_data, compress=9, tile=(512, 512))
 
         k += 1
     # end for

@@ -16,8 +16,6 @@ __all__ = ['Error', 'WSIInfo', 'MRIBase', 'MRI',
 import openslide as osl
 import abc
 import numpy as np
-import vigra
-
 
 
 class Error(Exception):
@@ -68,9 +66,10 @@ class WSIInfo(object):
             for k in range(wsi.level_count):
                 lv[k] = {'x_size': long(wsi.level_dimensions[k][0]),
                          'y_size': long(wsi.level_dimensions[k][1]),
-                         'downsample_factor': float(wsi.level_downsamples[k]),
-                         'tile_x_size': int(wsi.properties['openslide.level['+str(k)+'].tile-width']),
-                         'tile_y_size': int(wsi.properties['openslide.level[' + str(k) + '].tile-height'])}
+                         'downsample_factor': float(wsi.level_downsamples[k])}
+                if 'openslide.level['+str(k)+'].tile-width' in wsi.properties:
+                    lv[k]['tile_x_size'] = int(wsi.properties['openslide.level['+str(k)+'].tile-width']),
+                    lv[k]['tile_y_size'] = int(wsi.properties['openslide.level[' + str(k) + '].tile-height'])
             self.info['levels'] = lv
 
             if wsi.properties['openslide.vendor'] == 'hamamatsu':
@@ -132,7 +131,7 @@ class MRIBase(object):
             as_type: type of the pixels (default numpy.uint8)
 
         Returns:
-            a vigra.VigraArray
+            a numpy.ndarray (OpenCV channel ordering: (A)BGR)
         """
         pass
 
@@ -148,7 +147,7 @@ class MRIBase(object):
             as_type: type of the pixels (default numpy.uint8)
 
         Returns:
-            a vigra.VigraArray
+            a numpy.ndarray (OpenCV channel ordering: (A)BGR)
         """
         pass
 
@@ -186,7 +185,7 @@ class MRI(MRIBase):
                 as_type: type of the pixels (default numpy.uint8)
 
             Returns:
-                a vigra.VigraArray object, with image pixels addressable as [x, y, channel]
+                a numpy.ndarray
         """
 
         # OpenSlide requires specification of (x0,y0) in level-0 coordinates, so
@@ -198,15 +197,11 @@ class MRI(MRIBase):
             x0 *= sx
             y0 *= sy
 
+        x0, y0, width, height = [long(_x) for _x in [x0, y0, width, height]]
         pil_obj = self._reader.read_region((x0, y0), level, (width, height))
-        np_array = np.asarray(pil_obj, dtype=as_type, order='F')
-        img_data = np_array.view(vigra.VigraArray)
-        img_data.axistags = vigra.AxisTags('yxc')
+        img_data = np.asarray(pil_obj, dtype=as_type)
 
-        img_data.axistags.setResolution('x', self.info['levels'][level]['downsample_factor'] * self.info['x_mpp'])
-        img_data.axistags.setResolution('y', self.info['levels'][level]['downsample_factor'] * self.info['y_mpp'])
-
-        return img_data.transposeToVigraOrder()
+        return img_data
 
 
     def get_region(self, x0, y0, width, height, level, as_type=np.uint8):
