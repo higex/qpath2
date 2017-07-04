@@ -1,4 +1,4 @@
-all:compgeom_.so
+all: compgeom_.so
 
 compgeom_.so: compgeom.cxx
 	g++ -shared -fPIC -o compgeom_.so \

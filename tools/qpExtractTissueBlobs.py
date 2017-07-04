@@ -116,9 +116,9 @@ def main():
     # extract tissue regions:
     s = img.info['levels'][lowest_res_level]['downsample_factor'] / \
         img.info['levels'][args.level]['downsample_factor']  # downscale factor for the lowest resolution wrt. desired level
-    # s0 = img.level_downsamples[lowest_res_level]  # downscale factor for the lowest resolution wrt. level 0
-    #
-    # img.close()
+    s0 = img.info['levels'][lowest_res_level]['downsample_factor']  # downscale factor for the lowest resolution wrt. level 0
+
+    mri = None
 
     # order the regions, from the top-most (smaller y coordinate of the bounding box) to the
     # bottom-most:
@@ -129,8 +129,8 @@ def main():
         # get mask:
         msk = img_bin[pr.bbox[0]:pr.bbox[2], pr.bbox[1]:pr.bbox[3]].astype(np.uint8)
         # get image at highest resolution:
-        #start_x = np.int64(max(s0 * pr.bbox[1], 0))
-        #start_y = np.int64(max(s0 * pr.bbox[0], 0))
+        start_x = np.int64(max(s0 * pr.bbox[1], 0))
+        start_y = np.int64(max(s0 * pr.bbox[0], 0))
         width = np.int64(s * (pr.bbox[3] - pr.bbox[1]))
         height = np.int64(s * (pr.bbox[2] - pr.bbox[0]))
 
@@ -161,21 +161,21 @@ def main():
 
         # check whether the image already exists - hopefully the correct one, from a
         # previous run
-        # if not os.path.exists(meta[tname]['name']):
-        #     sp.check_call(["openslide-write-png", args.img_file,
-        #                    '{:d}'.format(start_x),
-        #                    '{:d}'.format(start_y),
-        #                    '{:d}'.format(args.level),
-        #                    '{:d}'.format(width),
-        #                    '{:d}'.format(height),
-        #                    meta[tname]['name']])
+        if not os.path.exists(meta[tname]['name']):
+            sp.check_call(["openslide-write-png", args.img_file,
+                           '{:d}'.format(start_x),
+                           '{:d}'.format(start_y),
+                           '{:d}'.format(args.level),
+                           '{:d}'.format(width),
+                           '{:d}'.format(height),
+                           meta[tname]['name']])
 
-        # print('reading '+ meta[tname]['name'])
-        # img_data = imread(meta[tname]['name'])
+        print('reading '+ meta[tname]['name'])
+        img_data = imread(meta[tname]['name'])
 
         # img_tissue = img.read_region((start_x, start_y), args.level,
         #                              (width, height))
-        img_data = mri.get_region_px(s * pr.bbox[1], s * pr.bbox[0], width, height, args.level, as_type=np.uint8)
+        # img_data = mri.get_region_px(s * pr.bbox[1], s * pr.bbox[0], width, height, args.level, as_type=np.uint8)
 
         msk_from_scanner = None
         if img_data.ndim == 3 and img_data.shape[2] == 4:
@@ -185,6 +185,7 @@ def main():
             small_mask = resize(msk_from_scanner, msk.shape, order=0, mode='constant', cval=0, preserve_range=True)
             small_mask[small_mask < 1] = 0
             small_mask *= msk  # 'AND' the masks
+            small_mask = small_mask.astype(np.uint8)
 
             img_data = img_data[:,:,:3]  # drop alpha-channel from image data
 
@@ -194,6 +195,8 @@ def main():
 
         if msk_from_scanner is not None:
             msk *= msk_from_scanner   # 'AND' the two masks
+
+        msk = msk.astype(np.uint8)
 
         if img_data.ndim == 2:
             img_data *= msk
@@ -212,12 +215,12 @@ def main():
             with tifffile.TiffWriter(meta[tname]['mask'], bigtiff=True) as tif:
                 tif.save(255 * msk, compress=9, tile=(512, 512))
 
-        #if not args.keep_whole_image:
-        #    os.remove(meta[tname]['name'])
-        #    meta[tname]['name'] = ''
-        if args.keep_whole_image:
-            with tifffile.TiffWriter(meta[tname]['name'], bigtiff=True) as tif:
-                tif.save(img_data, compress=9, tile=(512, 512))
+        if not args.keep_whole_image:
+           os.remove(meta[tname]['name'])
+           meta[tname]['name'] = ''
+        # if args.keep_whole_image:
+        #     with tifffile.TiffWriter(meta[tname]['name'], bigtiff=True) as tif:
+        #         tif.save(img_data, compress=9, tile=(512, 512))
 
         k += 1
     # end for
