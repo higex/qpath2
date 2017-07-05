@@ -171,48 +171,31 @@ def main():
 
         msk_from_scanner = None
         if img_data.ndim == 3 and img_data.shape[2] == 4:
-            # has alpha-channel
-            msk_from_scanner = img_data[:,:,3].astype(np.uint8)  # alpha-channel: 255 for the tissue region, 0 elsewhere
-            msk_from_scanner[msk_from_scanner == 255] = 1  # img 0/1
-            small_mask = resize(msk_from_scanner, msk.shape, order=0, mode='constant', cval=0, preserve_range=True)
-            small_mask[small_mask < 1] = 0
-            small_mask *= msk  # 'AND' the masks
-            small_mask = small_mask.astype(np.uint8)
-
             img_data = img_data[:,:,:3]  # drop alpha-channel from image data
 
         # up-scale the mask and set "True" for foreground
-        # msk = resize(msk, img_data.shape[:2], mode='constant', order=0, cval=0, preserve_range=True)
-        # msk[msk > 0] = 1  # drop float values due to aliasing
+        msk = resize(msk, img_data.shape[:2], mode='constant', order=0, cval=0, preserve_range=True)
+        msk[msk < 1] = 0  # drop values due to aliasing
+        msk = msk.astype(np.uint8)
 
-        if msk_from_scanner is not None:
-            # msk *= msk_from_scanner   # 'AND' the two masks
-            if img_data.ndim == 2:
-                img_data *= msk_from_scanner
-            else:
-                for ch in np.arange(img_data.shape[2]):
-                    img_data[:, :, ch] *= msk_from_scanner
-
-        # msk = msk.astype(np.uint8)
-        #
-        # if img_data.ndim == 2:
-        #     img_data *= msk
-        # else:
-        #     for ch in np.arange(img_data.shape[2]):
-        #         img_data[:, :, ch] *= msk
+        if img_data.ndim == 2:
+            img_data *= msk
+        else:
+            for ch in np.arange(img_data.shape[2]):
+                img_data[:, :, ch] *= msk
 
         # save
+        if args.verbose:
+            print("Save tiles...")
         save_tiled_image(img_data, dst_path, args.level, tile_geom, img_type=args.format)
 
-        # save, anyway, the small mask:
-        imsave(dst_path + os.path.sep + tname + '_level_{:d}.ppm'.format(lowest_res_level), 255*small_mask)
 
         # the large mask is saved only if asked:
-        if args.mask:
-            if args.verbose:
-                print("Save mask image...")
-            with tifffile.TiffWriter(meta[tname]['mask'], bigtiff=True) as tif:
-                tif.save(255 * msk, compress=9, tile=(512, 512))
+        # if args.mask:
+        #     if args.verbose:
+        #         print("Save mask image...")
+        #     with tifffile.TiffWriter(meta[tname]['mask'], bigtiff=True) as tif:
+        #         tif.save(255 * msk, compress=9, tile=(512, 512))
 
         if args.keep_whole_image:
             if args.verbose:
