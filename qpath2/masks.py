@@ -13,7 +13,7 @@ __all__ = ['add_region', 'masked_points', 'apply_mask']
 
 import numpy as np
 from skimage.draw import polygon
-import vigra
+
 
 ##-
 def add_region(mask, poly_line):
@@ -70,7 +70,7 @@ def apply_mask(img, mask):
     the mask will be set to 0. Changes are made in situ.
 
     Args:
-        img (numpy.array or vigra.VigraArray): an image as an N-dim array
+        img (numpy.array): an image as an N-dim array
             (height x width x no_of_channels)
         mask (numpy.array): a mask as a 2-dim array (height x width)
 
@@ -81,16 +81,12 @@ def apply_mask(img, mask):
         mask = mask.astype(np.uint8)
     mask[mask > 0] = 1
 
-    if isinstance(img, vigra.VigraArray):
-        ch_iter = img.channelIter()
-        for c in ch_iter:
-            c *= mask
+    if img.ndim == 2:
+        img *= mask
     else:
-        if img.ndim == 2:
-            img *= mask
-        else:
-            for k in np.arange(img.shape[2]):
-                img[:,:,k] *= mask
+        for k in np.arange(img.shape[2]):
+            img[:,:,k] *= mask
 
     return img
 ##-
+

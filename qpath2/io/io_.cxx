@@ -108,7 +108,12 @@ int osl_read_region(const std::string& filename,
 
     openslide_get_level0_dimensions(osl_reader, &w, &h);
     openslide_get_level_dimensions(osl_reader, level, &img_w, &img_h);
-    if (x > w || y > h || width > img_w || height > img_h)
+/*
+    std::cerr << "x = " << x << "\ty = " << y << std::endl;
+    std::cerr << "w0 = " << w << "\th0 = " << h << std::endl;
+    std::cerr << "wl = " << img_w << "\thl = " << img_h << std::endl;
+*/
+    if ((x > w) || (y > h) || (x/w*img_w + width > img_w) || (y/h*img_h+height > img_h))
         // region specification error
         return -3;
 

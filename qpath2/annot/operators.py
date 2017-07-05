@@ -10,10 +10,43 @@
 
 __all__ = ['poly_annot_inside']
 
-import vigra
 import numpy as np
 from ..compgeom import simple_polygon_intersection, rect_inside_polygon
 from ..masks import add_region, apply_mask
+from skimage.draw import polygon
+
+##- poly_annot_set_outside
+def poly_annot_set_outside(img, poly, value=0):
+    """Set pixels outside a polygonal region to a specified value. Operates
+    on a copy of the input data.
+
+    Args:
+        img (numpy.ndarray): a possibly multi-channel image, the filtering
+            is applied to each channel independently
+        poly (numpy.array): an (n x 2) array with (x,y) coordinates of the
+            polygonal region
+        value (numeric): the new value of the pixels outside the region
+
+    Returns:
+        numpy.ndarray: a new image
+    """
+
+    # check whether the last point matches the first one
+    if (poly[0, 0] != poly[-1, 0]) or (poly[0, 1] != poly[-1, 1]):
+        np.vstack((poly, poly[0,]))
+
+    # remember: row, col in polygon()
+    r, c = polygon(poly[:, 1], poly[:, 0], img.shape[:2])
+
+    res = np.full(img.shape, value, dtype=img.dtype)
+    if img.ndim == 2:
+        res[r, c] = img[r, c]
+    else:
+        for k in range(img.shape[2]):
+            res[r, c, k] = img[r, c, k]
+
+    return res
+##-
 
 
 ##-

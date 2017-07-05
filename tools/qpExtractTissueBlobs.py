@@ -31,6 +31,7 @@ from skimage.io import imsave, imread
 
 from qpath2.core import WSIInfo, MRI
 from qpath2.io.tiled import save_tiled_image
+from qpath2.io.reader import openslide_read_region_px
 
 import warnings
 
@@ -63,8 +64,16 @@ def main():
     tile_geom = (int(abs(float(h))), int(abs(float(v))))
 
 
-    print('Working on ' + args.img_file)
+    if args.verbose:
+        print('Working on ' + args.img_file)
+
     img = WSIInfo(args.img_file)
+
+    if args.verbose:
+        print("============================== I N F O ==================================")
+        print(img.info)
+        print("============================== I N F O ==================================")
+
     mri = MRI(img)
     #img = osl.OpenSlide(args.img_file)
     #meta = {'objective': img.properties[osl.PROPERTY_NAME_OBJECTIVE_POWER],
@@ -145,37 +154,20 @@ def main():
         if not os.path.exists(dst_path):
             os.mkdir(dst_path)
 
-        meta[tname] = dict({"name": dst_path + os.path.sep + tname + '_level_{:d}.png'.format(args.level),
+        meta[tname] = dict({"name": dst_path + os.path.sep + tname + '_level_{:d}.tiff'.format(args.level),
                             "mask": dst_path + os.path.sep + tname + '_mask_level_{:d}.tiff'.format(args.level),
                             "from_original_level": args.level,
                             "from_original_x": s * pr.bbox[1],
                             "from_original_y": s * pr.bbox[0],
                             "from_original_width": width,
                             "from_original_height": height})
+        if args.verbose:
+            print("Extract tissue blob {:d}".format(k+1))
 
-        # Currently (May 2017), a bug in PIL library leads to errors in the case of very
-        # large regions. Hence, we rely on the OpenSlide's utility to export the .PNG
-        # file. Then re-read it and continue with processing.
+        if args.verbose:
+            print("Get region: ({:d}, {:d}) x ({:d}, {:d}) @ {:d}".format(start_x, start_y, width, height, args.level))
 
-        print("Extract tissue blob {:d}".format(k+1))
-
-        # check whether the image already exists - hopefully the correct one, from a
-        # previous run
-        if not os.path.exists(meta[tname]['name']):
-            sp.check_call(["openslide-write-png", args.img_file,
-                           '{:d}'.format(start_x),
-                           '{:d}'.format(start_y),
-                           '{:d}'.format(args.level),
-                           '{:d}'.format(width),
-                           '{:d}'.format(height),
-                           meta[tname]['name']])
-
-        print('reading '+ meta[tname]['name'])
-        img_data = imread(meta[tname]['name'])
-
-        # img_tissue = img.read_region((start_x, start_y), args.level,
-        #                              (width, height))
-        # img_data = mri.get_region_px(s * pr.bbox[1], s * pr.bbox[0], width, height, args.level, as_type=np.uint8)
+        img_data = openslide_read_region_px(img, start_x, start_y, width, height, args.level)
 
         msk_from_scanner = None
         if img_data.ndim == 3 and img_data.shape[2] == 4:
@@ -191,7 +183,7 @@ def main():
 
         # up-scale the mask and set "True" for foreground
         msk = resize(msk, img_data.shape[:2], mode='constant', order=0, cval=0, preserve_range=True)
-        msk[msk < 1] = 0  # drop values due to aliasing
+        msk[msk > 0] = 1  # drop float values due to aliasing
 
         if msk_from_scanner is not None:
             msk *= msk_from_scanner   # 'AND' the two masks
@@ -212,15 +204,17 @@ def main():
 
         # the large mask is saved only if asked:
         if args.mask:
+            if args.verbose:
+                print("Save mask image...")
             with tifffile.TiffWriter(meta[tname]['mask'], bigtiff=True) as tif:
                 tif.save(255 * msk, compress=9, tile=(512, 512))
 
-        if not args.keep_whole_image:
-           os.remove(meta[tname]['name'])
-           meta[tname]['name'] = ''
-        # if args.keep_whole_image:
-        #     with tifffile.TiffWriter(meta[tname]['name'], bigtiff=True) as tif:
-        #         tif.save(img_data, compress=9, tile=(512, 512))
+        if args.keep_whole_image:
+            if args.verbose:
+                print("Save level image...")
+            with tifffile.TiffWriter(meta[tname]['name'], bigtiff=True) as tif:
+                tif.save(img_data, compress=9, tile=(512, 512))
+
 
         k += 1
     # end for

@@ -24,7 +24,7 @@
 
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 
-__all__ = ['save_tiled_image', 'load_tiled_image']
+__all__ = ['save_tiled_image', 'load_tiled_image', 'TiledImage']
 
 from math import floor
 import os
@@ -34,7 +34,7 @@ import simplejson as json
 import numpy as np
 from skimage.io import imread, imsave
 
-from qpath2.core import MRIBase
+from qpath2.core import MRIBase, Error
 
 
 ##-
@@ -148,6 +148,132 @@ class TiledImage(object):
     """A tiled image, loading regions on demand.
 
     """
+    _path = None
+    _meta = None
+
     def __init__(self, path):
-        pass
+        self._path = path
+        with open(self._path, 'r') as fp:
+            self._meta = json.load(fp)
+
+
+    @property
+    def path(self):
+        return self._path
+
+    @property
+    def width(self):
+        return long(self._meta['level_image_height'])
+
+    @property
+    def height(self):
+        return long(self._meta['level_image_width'])
+
+    @property
+    def level(self):
+        return int(self._meta['level'])
+
+    @property
+    def tile_count_horizontal(self):
+        return int(self._meta['n_tiles_horiz'])
+
+    @property
+    def tile_count_vertical(self):
+        return int(self._meta['n_tiles_vert'])
+
+    @property
+    def tile_count(self):
+        return self.tile_count_horizontal * self.tile_count_vertical
+
+    @property
+    def tile_width(self):
+        return int(self._meta['tile_width'])
+
+    @property
+    def tile_height(self):
+        return int(self._meta['tile_height'])
+
+    def get_tile(self, i, j):
+        """Return the (i,j)-th tile.
+        Args:
+            i, j (int): tile coordinates
+
+        Returns:
+            numpy.ndarray
+        """
+        img = imread(self._meta['tile_' + str(i) + '_' + str(j)]['name'])
+        return img
+
+
+    def get_image(self):
+        """Return the whole image, by loading all the tils."""
+        return load_tiled_image(self._meta)
+
+
+    def get_region(self, x, y, width, height):
+        """Return an arbitrary region within a tiled image.
+        Args:
+            x, y (long): top-left corner coordinates (column, row)
+            width, height (long): region extent
+
+        Returns:
+            numpy.ndarray
+        """
+        x, y, width, height = [long(_z) for _z in [x, y, width, height]]
+        if not (0 <= x < self.width):
+            raise Error('x out of bounds')
+        if not (0 <= y < self.height):
+            raise Error('y out of bounds')
+        if x + width > self.width or y + height > self.height:
+            raise Error('region too large for the image')
+
+        # Algo:
+        # -find the tiles to load
+        # -load all the tiles
+        # -adjust, if needed, the starting and ending points of the
+        #  region
+        # This is not optimal from a memory usage perspective, but
+        # it's simpler.
+
+        # Find the tiles covering the requested reqion
+        start_i = np.int(np.floor(y / self.tile_height))
+        start_j = np.int(np.floor(x / self.tile_width))
+        end_i = np.int(np.floor((y + height) / self.tile_height) + \
+                (1 if (y + height) % self.tile_height != 0 else 0))
+        end_j = np.int(np.floor((x + width) / self.tile_width) + \
+                (1 if (x + width) % self.tile_width != 0 else 0))
+
+        # Load the tiles start_i:end_i, start_j:end_j
+        tile = self.get_tile(start_i, start_j)
+        nchannels = 1 if tile.ndim == 2 else 3
+        if nchannels == 1:
+            img = np.zeros((self.tile_height * (end_i - start_i),
+                            self.tile_width * (end_j - start_j)), dtype=np.uint8)
+        else:
+            img = np.zeros((self.tile_height * (end_i - start_i),
+                            self.tile_width * (end_j - start_j),
+                            tile.shape[2]), dtype=np.uint8)
+
+        if nchannels == 1:
+            for i in range(start_i, end_i):
+                for j in range(start_i, end_i):
+                    tile = self.get_tile(i, j)
+                    img[(i-start_i)*self.tile_height:(i+1-start_i)*self.tile_height,
+                        (j-start_j)*self.tile_width:(j+1-start_j)*self.tile_width] = tile
+        else:
+            for i in range(start_i, end_i):
+                for j in range(start_j, end_j):
+                    tile = self.get_tile(i, j)
+                    img[(i-start_i)*self.tile_height:(i+1-start_i)*self.tile_height,
+                        (j-start_j)*self.tile_width:(j+1-start_j)*self.tile_width,:] = tile
+
+        # Adjust image to the requested region:
+        if nchannels == 1:
+            res = img[y - start_i*self.tile_height : y + height - start_i*self.tile_height,
+                  x - start_j * self.tile_width : x + width - start_j * self.tile_width].copy()
+        else:
+            res = img[y - start_i*self.tile_height : y + height - start_i*self.tile_height,
+                  x - start_j * self.tile_width : x + width - start_j * self.tile_width, :].copy()
+
+        return res
 ##-
