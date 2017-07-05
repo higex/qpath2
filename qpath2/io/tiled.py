@@ -26,11 +26,6 @@ from __future__ import (absolute_import, division, print_function, unicode_liter
 
 __all__ = ['save_tiled_image', 'load_tiled_image']
 
-import gi
-gi.require_version('Vips', '8.0')
-from gi.repository import Vips
-from gi.repository.Vips import Image as vi
-
 from math import floor
 import os
 import os.path
@@ -38,6 +33,9 @@ import shutil
 import simplejson as json
 import numpy as np
 from skimage.io import imread, imsave
+
+from qpath2.core import MRIBase
+
 
 ##-
 def save_tiled_image(img, root, level, tile_geom, img_type="jpeg"):
@@ -125,7 +123,7 @@ def load_tiled_image(img_meta):
                 y
 
     Returns:
-        a vigra.VigraArray
+        a numpy.ndarray
     """
     img_w, img_h = long(img_meta['level_image_width']), long(img_meta['level_image_height'])
     nh, nv = long(img_meta['n_tiles_horiz']), long(img_meta['n_tiles_vert'])
@@ -142,4 +140,14 @@ def load_tiled_image(img_meta):
             img[x:x+tile.width, y:y+tile.height, :] = tile
 
     return img
+##-
+
+
+##-
+class TiledImage(object):
+    """A tiled image, loading regions on demand.
+
+    """
+    def __init__(self, path):
+        pass
 ##-
