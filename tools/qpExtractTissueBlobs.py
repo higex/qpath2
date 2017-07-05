@@ -182,19 +182,24 @@ def main():
             img_data = img_data[:,:,:3]  # drop alpha-channel from image data
 
         # up-scale the mask and set "True" for foreground
-        msk = resize(msk, img_data.shape[:2], mode='constant', order=0, cval=0, preserve_range=True)
-        msk[msk > 0] = 1  # drop float values due to aliasing
+        # msk = resize(msk, img_data.shape[:2], mode='constant', order=0, cval=0, preserve_range=True)
+        # msk[msk > 0] = 1  # drop float values due to aliasing
 
         if msk_from_scanner is not None:
-            msk *= msk_from_scanner   # 'AND' the two masks
+            # msk *= msk_from_scanner   # 'AND' the two masks
+            if img_data.ndim == 2:
+                img_data *= msk_from_scanner
+            else:
+                for ch in np.arange(img_data.shape[2]):
+                    img_data[:, :, ch] *= msk_from_scanner
 
-        msk = msk.astype(np.uint8)
-
-        if img_data.ndim == 2:
-            img_data *= msk
-        else:
-            for ch in np.arange(img_data.shape[2]):
-                img_data[:, :, ch] *= msk
+        # msk = msk.astype(np.uint8)
+        #
+        # if img_data.ndim == 2:
+        #     img_data *= msk
+        # else:
+        #     for ch in np.arange(img_data.shape[2]):
+        #         img_data[:, :, ch] *= msk
 
         # save
         save_tiled_image(img_data, dst_path, args.level, tile_geom, img_type=args.format)
