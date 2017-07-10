@@ -54,8 +54,8 @@ def masked_points(poly_line, shape):
     """
 
     # check the last point to match the first one
-    if (poly_line[0, 0] != poly_line[-1, 0]) or (poly_line[0, 1] != poly_line[-1, 1]):
-        np.vstack((poly_line, poly_line[0,]))
+    if not np.all(poly_line[0,] == poly_line[-1,]):
+        poly_line = np.concatenate((poly_line, [poly_line[0,]]))
 
     # remeber: row, col in polygon()
     r, c = polygon(poly_line[:,1], poly_line[:,0], shape)

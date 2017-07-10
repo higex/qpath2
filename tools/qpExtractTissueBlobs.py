@@ -13,11 +13,9 @@ extracted and processed.
 """
 from __future__ import print_function, division, with_statement
 
-import openslide as osl
 import argparse as opt
 import numpy as np
 import simplejson as json
-import subprocess as sp
 import re
 import os, os.path
 

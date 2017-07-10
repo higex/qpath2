@@ -8,11 +8,14 @@
 # QPATH2.ANNOT.OPERATORS - various operators for annotation: apply,...
 #
 
-__all__ = ['poly_annot_inside']
+__all__ = ['poly_annot_inside', 'poly_annot_set_outside',
+           'poly_annot_copy_region']
 
 import numpy as np
 from ..compgeom import simple_polygon_intersection, rect_inside_polygon
 from ..masks import add_region, apply_mask
+from ..core import Error, expandSlicing
+
 from skimage.draw import polygon
 
 ##- poly_annot_set_outside
@@ -32,8 +35,9 @@ def poly_annot_set_outside(img, poly, value=0):
     """
 
     # check whether the last point matches the first one
-    if (poly[0, 0] != poly[-1, 0]) or (poly[0, 1] != poly[-1, 1]):
-        np.vstack((poly, poly[0,]))
+    if not np.all(poly[0,] == poly[-1,]):
+        poly_line = np.concatenate((poly, [poly[0,]]))
+
 
     # remember: row, col in polygon()
     r, c = polygon(poly[:, 1], poly[:, 0], img.shape[:2])
@@ -46,6 +50,40 @@ def poly_annot_set_outside(img, poly, value=0):
             res[r, c, k] = img[r, c, k]
 
     return res
+##-
+
+
+##-
+def poly_annot_copy_region(src, dst, poly):
+    """Copy a region defined by a polygonal annotation from <src> to <dst>.
+    The destination must be allocated previously and it must have the same
+    shape as the source.
+
+    Args:
+        src (numpy.ndarray)
+        dst (numpy.ndarray)
+        poly (numpy.ndarray): an (n x 2) array with (x,y) coordinates of the
+            polygonal region
+
+    Returns:
+        -
+    """
+    if src.shape != dst.shape:
+        raise Error("source and destination shapes differ")
+
+    # check whether the last point matches the first one
+    if not np.all(poly[0,] == poly[-1,]):
+        poly_line = np.concatenate((poly, [poly[0,]]))
+
+    # remember: row, col in polygon()
+    r, c = polygon(poly[:, 1], poly[:, 0], src.shape[:2])
+
+    if src.ndim == 2:
+        dst[r,c] = src[r,c]
+    else:
+        dst[r, c, :] = src[r, c, :]
+
+    return
 ##-
 
 
