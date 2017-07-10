@@ -52,7 +52,7 @@ def openslide_read_region_px(wsi, x0, y0, width, height, level):
     if r != 0:
         raise Error("low-level error in osl_read_region", code=r)
 
-    return img
+    return img[...,(2,1,0,3)]   # change BGRA into RGBA
 ##-
 
 
