@@ -24,12 +24,12 @@ class AnnotationObject(object):
     subclasses."""
 
     xy = np.ndarray((0,0), dtype=np.float64)  # empty array
-    name = None
-    annotation_type = None
+    _name = None
+    _annotation_type = None
 
     def __str__(self):
         """Return a string representation of the object."""
-        return str(self.annotation_type) + " <" + str(self.name) + ">: \n" + str(self.xy)
+        return str(self.type) + " <" + str(self.name) + ">: \n" + str(self.xy)
 
     def bounding_box(self):
         """Compute the bounding box of the object."""
@@ -72,12 +72,12 @@ class AnnotationObject(object):
     @property
     def name(self):
         """Return the name of the annotation object."""
-        return self.name
+        return self._name
 
     @property
     def type(self):
         """Return the annotation type as a string."""
-        return self.annotation_type
+        return self._annotation_type
 ##-
 
 
@@ -86,15 +86,15 @@ class Dot(AnnotationObject):
     """Dot: a single position in the image."""
 
     def __init__(self, x, y=None, name=None):
-        self.annotation_type = "DOT"
-        self.name = "DOT"
+        self._annotation_type = "DOT"
+        self._name = "DOT"
 
         if name is not None:
-            self.name = name
+            self._name = name
 
         if y is not None:
             if isinstance(y, str):
-                self.name = y
+                self._name = y
             else:
                 self.xy = np.array([[x, y]], dtype=np.float64)
                 return
@@ -112,15 +112,15 @@ class PointSet(AnnotationObject):
     """PointSet: an ordered collection of points."""
 
     def __init__(self, x, y=None, name=None):
-        self.annotation_type = "POINTSET"
-        self.name = "POINTS"
+        self._annotation_type = "POINTSET"
+        self._name = "POINTS"
 
         if name is not None:
-            self.name = name
+            self._name = name
 
         if y is not None:
             if isinstance(y, str):
-                self.name = y
+                self._name = y
             else:
                 self.xy = np.array([zip(x, y)], dtype=np.float64)
                 return
@@ -141,7 +141,7 @@ class Polygon(PointSet):
         if name is None:
             name = "POLYGON"
         super(Polygon, self).__init__(x, y=y, name=name)
-        self.annotation_type = "POLYGON"
+        self._annotation_type = "POLYGON"
 
         # ensure a closed contour:
         if not np.all(self.xy[0,] == self.xy[-1,]):
