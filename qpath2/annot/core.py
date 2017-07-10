@@ -122,7 +122,7 @@ class PointSet(AnnotationObject):
             if isinstance(y, str):
                 self._name = y
             else:
-                self.xy = np.array([zip(x, y)], dtype=np.float64)
+                self.xy = np.array(zip(x, y), dtype=np.float64)
                 return
 
         # check whether x is iterable and build the coords from it:

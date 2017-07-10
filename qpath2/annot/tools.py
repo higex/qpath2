@@ -179,6 +179,7 @@ def asap_read(asap_file):
                 k = int(c.get("Order"))
                 x[k] = np.float64(c.get("X"))
                 y[k] = np.float64(c.get("Y"))
+
             if ann_type.lower() == "dot":
                 ann_obj = Dot(x[0], y[0], name=ann.get("Name"))
             elif ann_type.lower() == "pointset":
