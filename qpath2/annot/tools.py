@@ -8,10 +8,11 @@
 # QPATH2.ANNOT.TOOLS - tools for handling various proprietary annotations.
 #
 
-__all__ = ['ndpa2xy', 'ndpa_read_single', 'ndpa_read']
+__all__ = ['ndpa2xy', 'ndpa_read_single', 'ndpa_read', 'asap_read']
 
 import numpy as np
 from qpath2.core import Error
+from qpath2.annot.core import *
 import xml.etree.ElementTree as ET
 
 ##-
@@ -136,4 +137,85 @@ def ndpa_read(ndpa_file):
         annot[name].append([(long(pts.find('x').text), long(pts.find('y').text)) for pts in list(p)])
 
     return annot
+##-
+
+
+##-
+def asap_read(asap_file):
+    """Read an annotation file stored as ASAP XML.
+
+    Args:
+        asap_file (str): name of the XML file
+
+    Returns:
+        a dict with the annotation hierarchy
+    """
+
+    xml_file = ET.parse(asap_file)
+    xml_root = xml_file.getroot()
+
+    if xml_root.tag != "ASAP_Annotations":
+        raise Error("file " + asap_file +" is not recognized as an ASAP annotation file.")
+
+    annot = {"other": []}
+
+    # get annotation groups
+    for ann_grp in xml_root.findall("AnnotationGroups"):
+        for grp in list(ann_grp):
+            grp_name = grp.get("Name")
+            annot[grp_name] = []
+
+    # read annotations and put them in the corresponding groups:
+    for anns in xml_root.findall("Annotations"):
+        for ann in list(anns):
+            grp_name = ann.get("PartOfGroup")
+            ann_type = ann.get("Type")
+            coords = ann.find("Coordinates").findall("Coordinate")
+            if coords is None:
+                raise Error("XML annotation incomplete")
+            x = np.zeros(len(coords), dtype=np.float64)
+            y = np.zeros(len(coords), dtype=np.float64)
+            for c in coords:
+                k = int(c.get("Order"))
+                x[k] = np.float64(c.get("X"))
+                y[k] = np.float64(c.get("Y"))
+            if ann_type.lower() == "dot":
+                ann_obj = Dot(x[0], y[0], name=ann.get("Name"))
+            elif ann_type.lower() == "pointset":
+                ann_obj = PointSet(x, y, name=ann.get("Name"))
+            elif ann_type.lower() == "polygon":
+                ann_obj = Polygon(x, y, name=ann.get("Name"))
+            else:
+                raise Error("unkown annotation " + ann_type)
+
+            if grp_name in annot:
+                annot[grp_name].append(ann_obj)
+            else:
+                annot["other"].append(ann_obj)
+
+    return annot
+##-
+
+
+##-
+def annot_pretty_print(annot):
+    """Pretty print an annotation object.
+
+    Args:
+        annot (dict): an annotation
+
+    Returns:
+        -
+    """
+    print("{")
+    k = 1
+    for a in annot:
+        print("Group: " + a)
+        print("-"*36)
+        k += 1
+        for obj in annot[a]:
+            print("\t"*k + str(obj))
+        k -= 1
+        print("="*36)
+    print("}")
 ##-
