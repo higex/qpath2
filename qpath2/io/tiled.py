@@ -210,6 +210,39 @@ class TiledImage(object):
         return load_tiled_image(self._meta)
 
 
+    def get_tile_coverage(self, x, y, width, height):
+        """Return the indices (i,j) of the tiles covering a given
+        rectangular region.
+
+        Args:
+            x, y (long): top-left corner coordinates (column, row)
+            width, height (long): region extent
+
+        Returns:
+            list of pairs: [(i,j), ...] corresponding to tiles_i_j covering
+             the region
+        """
+        x, y, width, height = [long(_z) for _z in [x, y, width, height]]
+        if not (0 <= x < self.width):
+            raise Error('x out of bounds')
+        if not (0 <= y < self.height):
+            raise Error('y out of bounds')
+        if x + width > self.width or y + height > self.height:
+            raise Error('region too large for the image')
+
+        # Find the tiles covering the requested reqion
+        start_i = np.int(np.floor(y / self.tile_height))
+        start_j = np.int(np.floor(x / self.tile_width))
+        end_i = np.int(np.floor((y + height) / self.tile_height) + \
+                (1 if (y + height) % self.tile_height != 0 else 0))
+        end_j = np.int(np.floor((x + width) / self.tile_width) + \
+                (1 if (x + width) % self.tile_width != 0 else 0))
+
+        ij = [(i, j) for i in np.arange(start_i, end_i) for j in np.arange(start_j, end_j)]
+
+        return ij
+
+
     def get_region(self, x, y, width, height):
         """Return an arbitrary region within a tiled image.
         Args:
@@ -258,14 +291,22 @@ class TiledImage(object):
             for i in range(start_i, end_i):
                 for j in range(start_i, end_i):
                     tile = self.get_tile(i, j)
-                    img[(i-start_i)*self.tile_height:(i+1-start_i)*self.tile_height,
-                        (j-start_j)*self.tile_width:(j+1-start_j)*self.tile_width] = tile
+
+                    # last tile in row and last row of tiles might have non-standard
+                    # dimensions, so better use the actual tile shape in computing the
+                    # end point:
+                    img[(i-start_i)*self.tile_height:(i-start_i)*self.tile_height + tile.shape[0],
+                        (j-start_j)*self.tile_width:(j-start_j)*self.tile_width + tile.shape[1]] = tile
         else:
             for i in range(start_i, end_i):
                 for j in range(start_j, end_j):
                     tile = self.get_tile(i, j)
-                    img[(i-start_i)*self.tile_height:(i+1-start_i)*self.tile_height,
-                        (j-start_j)*self.tile_width:(j+1-start_j)*self.tile_width,:] = tile
+
+                    # last tile in row and last row of tiles might have non-standard
+                    # dimensions, so better use the actual tile shape in computing the
+                    # end point:
+                    img[(i-start_i)*self.tile_height:(i-start_i)*self.tile_height + tile.shape[0],
+                        (j-start_j)*self.tile_width:(j-start_j)*self.tile_width + tile.shape[1], :] = tile
 
         # Adjust image to the requested region:
         if nchannels == 1:
