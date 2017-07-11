@@ -162,11 +162,11 @@ class TiledImage(object):
         return self._path
 
     @property
-    def width(self):
+    def height(self):
         return long(self._meta['level_image_height'])
 
     @property
-    def height(self):
+    def width(self):
         return long(self._meta['level_image_width'])
 
     @property
