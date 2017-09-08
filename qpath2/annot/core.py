@@ -27,6 +27,10 @@ class AnnotationObject(object):
     _name = None
     _annotation_type = None
 
+    @abc.abstractmethod
+    def duplicate(self):
+        pass
+
     def __str__(self):
         """Return a string representation of the object."""
         return str(self.type) + " <" + str(self.name) + ">: \n" + str(self.xy)
@@ -51,6 +55,37 @@ class AnnotationObject(object):
         if y_scale is None:
             y_scale = x_scale
         self.xy *= np.array([x_scale, y_scale])
+
+    def affine(self, M):
+        """Apply an affine transformation to all points of the annotation.
+
+        If M is the affine transformation matrix, the new coordinates
+        (x', y') of a point (x, y) will be computed as
+
+        x' = M[1,1] x + M[1,2] y + M[1,3]
+        y' = M[2,1] x + M[2,2] y + M[2,3]
+
+        In other words, if P is the 3 x n matrix of n points,
+        P = [x; y; 1]
+        then the new matrix Q is given by
+        Q = M * P
+
+        Parmeters:
+        ---------
+            M: numpy array [2 x 3]
+
+        Returns:
+            nothing
+        """
+
+        # simpler than using the matrix operations
+        qx = self.xy[:, 0] * M[0, 0] + self.xy[:, 1] * M[0, 1] + M[0, 2]
+        qy = self.xy[:, 0] * M[1, 0] + self.xy[:, 1] * M[1, 1] + M[1, 2]
+
+        self.xy[:, 0] = qx
+        self.xy[:, 1] = qy
+
+        return
 
     @property
     def x(self):
@@ -104,6 +139,9 @@ class Dot(AnnotationObject):
             self.xy = np.array(x, dtype=np.float64)[:2]
             return
         raise Error('x parameter cannot be interpretated as a 2D vector')
+
+    def duplicate(self):
+        return Dot(self.xy, name=self.name)
 ##-
 
 
@@ -130,6 +168,10 @@ class PointSet(AnnotationObject):
             self.xy = np.array(x, dtype=np.float64)[:,:2]
             return
         raise Error('x parameter cannot be interpretated as a 2D array')
+
+
+    def duplicate(self):
+        return PointSet(self.xy, name=self.name)
 ##-
 
 
@@ -146,4 +188,8 @@ class Polygon(PointSet):
         # ensure a closed contour:
         if not np.all(self.xy[0,] == self.xy[-1,]):
             self.xy = np.concatenate((self.xy, [self.xy[0,]]), axis=0)
+
+
+    def duplicate(self):
+        return Polygon(self.xy, name=self.name)
 ##-
