@@ -25,21 +25,24 @@ from skimage.draw import circle, set_color
 def main():
     p = opt.ArgumentParser(description="Marks points and regions in a color image.")
     p.add_argument('img_file', action='store', help='target image (RGB)')
-    p.add_argument('mask', action='store', help='a B/W or gray scale mask image for points/regions of interest')
-    p.add_argument('-o', '--out', action='store', help='name of the result image', default='out.png')
-    p.add_argument('-m', '--mark', action='store', choices=['disc', 'cross'],
+    p.add_argument('mask', action='store', help='a binary mask as a 2D numpy array (in .npz file)')
+    p.add_argument('outfile', action='store', help='name of the result image')
+
+    p.add_argument('-n', '--name', action='store', default='mask',
+                   help='name of the mask object in the .npz file')
+    p.add_argument('-m', '--mark', action='store', choices=['disk', 'cross'],
                    help='type of marking to be used')
     p.add_argument('-c', '--color', action='store', help='color to use for drawing (R,G,B)',
                    default='(255,0,0)')
     p.add_argument('-s', '--size', action='store', default=5, type=int,
                    help='size (in pixels) of the marking')
-    p.add_argument('-t', '--threshold', action='store', type=int, default=0,
-                   help='all the values >threshold in the mask will be marked in the image')
+    p.add_argument('-a', '--alpha', action='store', type=float, default=0.5,
+                   help='alpha level (<1 transparent marking)')
 
     args = p.parse_args()
 
     img = imread(args.img_file)
-    msk = imread(args.mask, as_grey=True)
+    msk = np.load(args.mask)[args.name]
 
     rx = re.compile(r'(\d+,\d+,\d+)')
     clr = rx.findall(args.color)[0].split(',')
@@ -53,18 +56,18 @@ def main():
     if img.shape[:2] != msk.shape[:2]:
         raise RuntimeError("The image and the mask must have the same extent.")
 
-    [r, c] = np.where(msk > args.threshold)
+    [r, c] = np.where(msk > 0)
 
-    if args.mark == 'disc':
+    if args.mark == 'disk':
         for y, x in zip(r, c):
             rr, cc = circle(y, x, args.size, shape=img.shape)
-            img = set_color(img, (rr, cc), mk_color)
+            set_color(img, (rr, cc), mk_color, alpha=args.alpha)
     elif args.mark == 'cross':
         pass # to be done
     else:
         raise RuntimeError('Unkown mark shape requested')
 
-    imsave(args.out, img)
+    imsave(args.outfile, img)
 
     return
 
