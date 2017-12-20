@@ -14,9 +14,6 @@ from __future__ import print_function, division, with_statement
 
 import argparse as opt
 import numpy as np
-import h5py
-
-from skimage.io import imsave, imread
 from skimage.morphology import extrema, disk
 
 def main():
